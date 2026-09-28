@@ -1,0 +1,187 @@
+---
+title: "Lab: From a pattern to a statistic"
+author: "STAT-S681"
+date: "Simulation-Based Inference · Session 10"
+output:
+  html_document:
+    toc: true
+    toc_depth: 2
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, fig.width = 8, fig.height = 4.5)
+library(ggplot2)
+library(patchwork)
+theme_set(theme_bw())
+source("ridgecrest_sim.R")
+```
+
+## Today's question
+
+You can often see that simulated data don't look like the real data. In this lab, you will practice turning what you see into a number that you can formally check.
+
+We will practice on a model of the aftershocks of the July 2019 magnitude 7.1 Ridgecrest,
+California earthquake, and a model that has already been fitted.
+
+## The data and the model
+
+The data are 1109 aftershocks (magnitude ≥ 2.5, 0.25–30 days after the
+mainshock). Each location is given as $U$, km along the main fault
+(positive to the NW), and $V$, km across it (positive to the NE). Plotting
+$V$ against $U$ gives a "straightened" map of the fault zone.
+
+The fitted model (details in `10-model-description.html`):
+
+* Most events lie in one band around one gently curved fault, the red
+  curve on the maps. How busy the band is varies along the fault, and within
+  the band, events are spread across the fault by the same Normal amount
+  everywhere.
+* A small share of events (about 7%) is more broadly scattered.
+
+We have already simulated 300 replicate catalogs from the fitted model.
+
+```{r load}
+obs <- read.csv("data/observed_catalog.csv")          # the real catalog
+reps_long <- read.csv("data/replicates.csv.gz")       # 300 simulated catalogs, stacked
+reps <- split(reps_long[, names(reps_long) != "rep"], reps_long$rep)  # list of 300 catalogs
+B <- length(reps)
+head(obs)
+```
+
+Every catalog, real or simulated, has these columns:
+
+| Column | Meaning |
+|---|---|
+| `u_km`, `v_km` | position along and across the reference line |
+| `offset_km` | distance from the fitted fault curve, NE positive (also `offset_from_fault(cat)`) |
+| `t_days`, `mag` | time after the mainshock and magnitude (not needed today) |
+
+## Look first
+
+First plot the observed catalog and three replicates. The red curve is the fitted fault.
+
+```{r maps, fig.height=7.5}
+fault_uv <- data.frame(u_km = seq(fit$u_lo, fit$u_hi, by = 0.5))
+fault_uv$v_km <- fault_centre(fault_uv$u_km)
+
+labs4 <- c("observed", paste("replicate", 1:3))
+map_df <- do.call(rbind, Map(function(d, lab) data.frame(d[, c("u_km", "v_km")], catalog = lab),
+                             c(list(obs), reps[1:3]), labs4))
+map_df$catalog <- factor(map_df$catalog, levels = labs4)
+
+ggplot(map_df, aes(u_km, v_km)) +
+  geom_line(data = fault_uv, colour = "red") +
+  geom_point(size = 0.4, alpha = 0.5) +
+  facet_wrap(~catalog, ncol = 1) +
+  coord_equal(xlim = window$u, ylim = window$v) +
+  labs(x = "U: km along the fault (NW positive)", y = "V: km across (NE positive)")
+```
+
+As a warmup, check whether the model seems to get the number of events approximately correct.
+The helper function below might help, you would just need to write a function that can be passed as the `statistic` argument.
+
+`check_statistic()` applies any function of one catalog to the observed
+catalog and to all 300 replicates, then draws the replicates' values with
+the observed value in red.
+
+```{r check-fun}
+check_statistic <- function(statistic, label = "statistic") {
+  T_obs <- statistic(obs)
+  T_rep <- vapply(reps, statistic, numeric(1))
+  print(round(c(observed = T_obs, replicate_min = min(T_rep), replicate_median = median(T_rep),
+                replicate_max = max(T_rep), n_reps_at_or_above = sum(T_rep >= T_obs),
+                n_reps_at_or_below = sum(T_rep <= T_obs)), 3))
+  whole <- all(T_rep == round(T_rep))  # counts get one bar per value
+  ggplot(data.frame(T_rep), aes(T_rep)) +
+    geom_histogram(bins = if (whole) NULL else 30, binwidth = if (whole) 1 else NULL,
+                   fill = "grey70", colour = "white") +
+    geom_vline(xintercept = T_obs, colour = "red", linewidth = 1) +
+    labs(x = label, y = "replicates", subtitle = "red: observed")
+}
+```
+
+## Part 1: Describe what you see
+
+With a partner, look at the maps and pick **one** pattern in the observed
+catalog that seems unusual compared with the replicates. Check it against
+all three replicates, not just one. Describe it in words before you read
+on.
+
+1. What is the pattern?
+
+   *Answer:*
+
+
+
+## Part 2: Turn the observation into a statistic
+
+1. Complete this sentence for your pattern:
+
+> For every catalog, I will calculate ______. If the discrepancy I noticed is
+> real, the observed value should be unusually **high / low**.
+
+   *Answer:*
+
+
+
+## Part 3: Implement and compare
+
+
+
+### A first attempt: overall clustering
+
+Start with the **mean three-neighbour distance**: for each event, average its
+distances to its three nearest neighbours, then average over all events.
+Smaller values mean events are more tightly clustered.
+
+You'll first need a function that returns, for each event in a catalog, its
+average distance to its three nearest neighbours. Hint: `dist()` computes all
+pairwise distances, e.g. `D <- as.matrix(dist(cbind(cat$u_km, cat$v_km)))`.
+In each row of `D`, the smallest entry is the event's distance to itself (0),
+so the next three are its nearest neighbours (try `sort()` inside `apply()`).
+This takes about a quarter of a second per catalog, so a minute or two for all
+300: test it on `obs` first, and consider computing it once for every catalog
+and storing it as a new column that later statistics can reuse. The packages
+`FNN` (`get.knn()`), `RANN` (`nn2()`) and `dbscan` (`kNNdist()`) find nearest
+neighbours much faster, if you install one.
+
+**Predict before you run:** will the observed value be smaller or larger
+than most replicates' values?
+
+*Answer:*
+
+
+```{r stat1, fig.height=3.5, eval=FALSE}
+mean_neighbor_distance <- function(cat) {
+  ___  # for each event: average distance to its 3 nearest neighbours
+}
+
+statistic <- function(cat) {
+  ___  # one number for this catalog
+}
+check_statistic(statistic, "mean 3-neighbour distance (km)")
+```
+
+### Your own statistic
+
+Now write a statistic that measures **your** discrepancy from Part 1.
+
+```{r stat2, fig.height=3.5, eval=FALSE}
+statistic2 <- function(cat) {
+  ___  # one number for this catalog
+}
+check_statistic(statistic2, "___")
+```
+
+## Part 4: Interpret
+
+
+1. What did you find?
+
+   *Answer:*
+
+
+2. What aspect of the map does your statistic capture? What could still be
+   wrong with the model even if your statistic looked typical?
+
+   *Answer:*
