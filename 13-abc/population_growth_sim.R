@@ -100,6 +100,24 @@ simulate_data <- function(theta, beta, gamma, n, loci = 8L,
        node_time = time, node_states = states)
 }
 
+# Convert the genealogy returned by simulate_data(..., return_genealogy = TRUE)
+# to an ape "phylo" object, e.g. for plot(ladderize(as_phylo(g))).
+# Building the object needs only base R; plotting it needs the ape package.
+as_phylo <- function(genealogy) {
+  n <- nrow(genealogy$data)
+  # ape numbers tips 1..n and internal nodes n+1..2n-1 with the root at n+1.
+  # The simulator numbers internal nodes in merger order with the root last.
+  relabel <- function(v) ifelse(v <= n, v, 3L * n - v)
+  e <- genealogy$edges
+  tree <- list(edge = cbind(relabel(e$parent), relabel(e$child)),
+               edge.length = e$length,
+               tip.label = paste0("chr", seq_len(n)),
+               Nnode = n - 1L)
+  storage.mode(tree$edge) <- "integer"
+  class(tree) <- "phylo"
+  tree
+}
+
 summary_stats <- function(x) {
   stopifnot(is.matrix(x), nrow(x) >= 2L, ncol(x) >= 1L,
             all(is.finite(x)), all(x == round(x)))
