@@ -1,0 +1,8 @@
+numpy
+scipy
+matplotlib
+ipywidgets>=8
+plotly>=6
+anywidget
+jupyterlab
+pytest
